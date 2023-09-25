@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Bulk Audio To Video Converter</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+		<!-- csp -->
+		<meta
+			http-equiv="Content-Security-Policy"
+			content="default-src 'self'; script-src 'self'"
+		/>
+		<meta
+			http-equiv="X-Content-Security-Policy"
+			content="default-src 'self'; script-src 'self'"
+		/>
+
+		<!-- styles -->
+		<link rel="stylesheet" href="./styles.css" />
+	</head>
+	<body>
+		<div class="container">
+			<div class="headings">
+				<h1>Audio2mp4 Converter</h1>
+			</div>
+			<div class="main-container">
+				<div class="selection">
+					<!-- a file browser -->
+					<div class="selection-audios">
+						<button id="select-folder">Select Audios Folder</button>
+						<div id="selected-folder"></div>
+					</div>
+					<div>
+						<button id="select-image">Select Background Image</button>
+						<div id="selected-image"></div>
+					</div>
+					<div id="conversion-status"></div>
+				</div>
+				<div class="progress">
+					<div id="progress-bar"></div>
+					<div id="progress-percentage"></div>
+				</div>
+				<div class="start-stop">
+					<button id="convert-button">Convert to MP4</button>
+					<button id="cancel-button" disabled>Cancel</button>
+				</div>
+			</div>
+
+			<h2>Why Audio2mp4 Converter?</h2>
+			<ul>
+				<li>
+					Just by selecting a source folder containing your audio files and
+					then, with the click of a button, transcode them into mp4 videos
+					effortlessly, ensuring compatibility and ease of playback across a
+					wide range of devices and platforms.
+				</li>
+
+				<li>
+					It converts audio files into the universally compatible MP4 format
+					seamlessly.
+				</li>
+				<li>
+					Converts all audio files in a folder to mp4 videos with a background
+					image.
+				</li>
+			</ul>
+		</div>
+
+		<script src="./renderer.js"></script>
+	</body>
+</html>
+
