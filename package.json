@@ -1,23 +1,30 @@
 {
   "name": "audios2videos",
   "productName": "Audios2videos",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Converts a whole folder audio files to videos",
   "main": "./src/index.js",
   "build": {
     "appId": "audios2videos.waanfeetan.com",
     "asar": true,
-    "asarUnpack": [],
+    "asarUnpack": [
+      "node_modules/ffmpeg-static-electron/bin/win/x64/ffmpeg",
+      "node_modules/ffmpeg-static-electron/index.js",
+      "node_modules/ffmpeg-static-electron/package.json"
+    ],
     "files": [
       "./src/index.js",
       "./src/preload.js",
       "./src/renderer.js",
       "./src/index.html",
-      "./src/styles.css",
-      "node_modules/"
+      "./src/styles.css"
     ],
     "win": {
-      "icon": "./assets/icon.ico"
+      "icon": "./assets/icon.ico",
+      "target": [
+        "nsis"
+      ],
+      "publisherName": "Waanfeetan"
     }
   },
   "scripts": {
@@ -37,7 +44,8 @@
   "dependencies": {
     "electron-dialog": "^2.0.0",
     "electron-squirrel-startup": "^1.0.0",
-    "ffmpeg-static": "^5.2.0",
+    "ffmpeg-static-electron": "^2.0.3",
+    "ffprobe-static-electron": "^2.0.2",
     "fluent-ffmpeg": "^2.1.2"
   },
   "devDependencies": {
@@ -47,7 +55,7 @@
     "@electron-forge/maker-squirrel": "^6.4.2",
     "@electron-forge/maker-zip": "^6.4.2",
     "@electron-forge/plugin-auto-unpack-natives": "^6.4.2",
-    "electron": "26.2.2",
+    "electron": "^26.4.0",
     "electron-builder": "^24.6.4"
   }
 }

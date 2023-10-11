@@ -1,8 +1,21 @@
-const { app, Icon, Menu, BrowserWindow, dialog, ipcMain } = require("electron");
+const { app, Menu, BrowserWindow, dialog, ipcMain } = require("electron");
 const path = require("node:path");
-const ffmpeg = require("fluent-ffmpeg");
 const fs = require("fs");
-const {} = require("electron");
+const ffmpeg = require("fluent-ffmpeg");
+
+//Get the paths to the packaged versions of the binaries we want to use
+const ffmpegPath = require("ffmpeg-static-electron").path.replace(
+  "app.asar",
+  "app.asar.unpacked"
+);
+const ffprobePath = require("ffprobe-static-electron").path.replace(
+  "app.asar",
+  "app.asar.unpacked"
+);
+
+//tell the ffmpeg package where it can find the needed binaries.
+ffmpeg.setFfmpegPath(ffmpegPath);
+ffmpeg.setFfprobePath(ffprobePath);
 
 // --------------
 let mainWindow;
@@ -316,7 +329,7 @@ async function convertAudiosToMP4(
           let avgProgress = averageProgress(progresses, audioFiles.length);
           mainWindow.webContents.send(
             "conversion-status",
-            `Completed: ${Math.round(avgProgress, 4)}%`
+            `Completed: ${avgProgress < 0 ? 0 : Math.round(avgProgress, 2)}%`
           );
         })
         .on("error", (err) => {
