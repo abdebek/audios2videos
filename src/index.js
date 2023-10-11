@@ -6,7 +6,16 @@ const {} = require("electron");
 
 // --------------
 let mainWindow;
-const validAudioExtensions = ["mp3", "amr", "wav", "wma", "ogg", "flac", "aac"];
+const validAudioExtensions = [
+  "mp3",
+  "m4a",
+  "amr",
+  "wav",
+  "wma",
+  "ogg",
+  "flac",
+  "aac",
+];
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require("electron-squirrel-startup")) {
@@ -40,6 +49,20 @@ const createWindow = () => {
 
   // and load the index.html of the app.
   mainWindow.loadFile(path.join(__dirname, "index.html"));
+
+  // check ffmpeg installation
+  ffmpeg.getAvailableEncoders((err, encoders) => {
+    if (err) {
+      console.error(err);
+      dialog.showErrorBox(
+        "Error",
+        "FFMPEG not installed. Please install FFMPEG and try again."
+      );
+      return;
+    }
+
+    console.log("Available encoders: ", encoders);
+  });
 
   // Open the DevTools.
   // mainWindow.webContents.openDevTools();
