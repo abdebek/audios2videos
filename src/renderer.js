@@ -1,10 +1,12 @@
-const selectFolderBtn = document.getElementById("select-folder");
+const selectInputFolderBtn = document.getElementById("select-input-folder");
+const selectOutputFolderBtn = document.getElementById("select-output-folder");
 const selectImageBtn = document.getElementById("select-image");
 const convertBtn = document.getElementById("convert-button");
 const cancelBtn = document.getElementById("cancel-button");
 const resetBtn = document.getElementById("reset-button");
 const conversionStatus = document.getElementById("conversion-status");
-const folderElement = document.getElementById("selected-folder");
+const inputFolderElement = document.getElementById("selected-input-folder");
+const outputFolderElement = document.getElementById("selected-output-folder");
 const imagePreviewElement = document.getElementById("selected-image-preview");
 const imageElement = document.getElementById("selected-image");
 
@@ -14,8 +16,12 @@ cancelBtn.hidden = true;
 resetBtn.hidden = true;
 imagePreviewElement.hidden = true;
 
-selectFolderBtn.addEventListener("click", () => {
-  window.electronAPI.selectFolder();
+selectInputFolderBtn.addEventListener("click", () => {
+  window.electronAPI.selectInputFolder("input");
+});
+
+selectOutputFolderBtn.addEventListener("click", () => {
+  window.electronAPI.selectOutputFolder("output");
 });
 
 selectImageBtn.addEventListener("click", () => {
@@ -38,13 +44,18 @@ cancelBtn.addEventListener("click", () => {
 resetBtn.addEventListener("click", () => {
   window.electronAPI.reset();
   resetBtn.hidden = true;
-  folderElement.innerHTML = "";
+  inputFolderElement.innerHTML = "";
   imageElement.src = "";
 });
 
-// selected-folder
-window.electronAPI.on("selected-folder", (event, folderPath) => {
-  folderElement.innerHTML = folderPath;
+// selected-input-folder
+window.electronAPI.on("selected-input-folder", (event, folderPath) => {
+  inputFolderElement.innerHTML = folderPath;
+});
+
+// selected-output-folder
+window.electronAPI.on("selected-output-folder", (event, folderPath) => {
+  outputFolderElement.innerHTML = folderPath;
 });
 
 // image-selected

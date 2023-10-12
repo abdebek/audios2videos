@@ -9,8 +9,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
   chrome: () => process.versions.chrome,
   electron: () => process.versions.electron,
   ping: () => ipcRenderer.send("ping", "ping"),
-  selectFolder: () => ipcRenderer.send("select-folder"),
   selectImage: () => ipcRenderer.send("select-image"),
+  selectInputFolder: () => ipcRenderer.send("select-input-folder"),
+  selectOutputFolder: () => ipcRenderer.send("select-output-folder"),
+
+  // TODO: seems like this is not needed anymore
   startConversion: () => ipcRenderer.send("start-conversion"),
   conversionStatus: () => ipcRenderer.send("conversion-status"),
   conversionProgressUpdate: (fnc) =>
@@ -18,7 +21,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   cancelConversion: () => ipcRenderer.send("cancel-conversion"),
   conversionDone: () => ipcRenderer.send("conversion-done"),
   conversionFailed: () => ipcRenderer.send("conversion-failed"),
-  conversionCanceled: () => ipcRenderer.send("conversion-cancelled"),
+  conversionCancelled: () => ipcRenderer.send("conversion-cancelled"),
+
   on: (channel, func) => ipcRenderer.on(channel, func),
   // we can also expose variables, not just functions
 });

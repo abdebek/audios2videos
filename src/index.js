@@ -54,7 +54,10 @@ const createWindow = () => {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 
   ipcMain.on("ping", () => "pong");
-  ipcMain.on("select-folder", selectFolder);
+
+  // accept the select folder event and folder type from the renderer process
+  ipcMain.on("select-input-folder", selectInputFolder);
+  ipcMain.on("select-output-folder", selectOutputFolder);
   ipcMain.on("select-image", selectImage);
   ipcMain.on("start-conversion", startConversion);
   ipcMain.on("cancel-conversion", cancelConversion);
@@ -78,7 +81,7 @@ const createWindow = () => {
   });
 
   // Open the DevTools.
-  // mainWindow.webContents.openDevTools();
+  mainWindow.webContents.openDevTools();
 
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -100,22 +103,34 @@ app.whenReady().then(() => {
   });
 
   // Store the selected folder path in the global variable
-  // TODO: comments are just for testing
-  global.selectedFolderPath = ""; // path.join(__dirname, "../assets", "Test");
+  global.selectedInputFolderPath = "";
+  global.selectedOutputFolderPath = "";
   global.selectedImagePath = "";
-  // path.join(
-  //   __dirname,
-  //   "../assets",
-  //   "placeholder.jpg"
-  // );
+  global.processAborted = false;
+  global.userPreference = {
+    confirmDelete: undefined,
+    doNotAskAgain: false,
+  };
 });
 
-async function selectFolder(event, folderPath = global.selectedFolderPath) {
+function selectInputFolder(event) {
+  selectFolder(event, "input");
+}
+
+function selectOutputFolder(event) {
+  selectFolder(event, "output");
+}
+
+async function selectFolder(event, folderType = "input") {
+  let folderPath =
+    folderType === "input"
+      ? global.selectedInputFolderPath
+      : global.selectedOutputFolderPath;
   let { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
-    properties: ["openFile", "openDirectory"],
+    properties: ["openDirectory"],
     title: "Select a folder to convert",
     buttonLabel: "Confirm selection",
-    defaultPath: folderPath, //app.getPath('music'),
+    defaultPath: folderPath,
     filters: [
       {
         name: "Audio",
@@ -124,23 +139,41 @@ async function selectFolder(event, folderPath = global.selectedFolderPath) {
     ],
   });
 
-  // Store the selected folder path in the global variable
-  if (!canceled && filePaths && filePaths?.length > 0) {
-    // encode the path as utf8
-    global.selectedFolderPath = Buffer.from(filePaths[0], "utf8").toString(
-      "utf8"
-    );
-    mainWindow.webContents.send("selected-folder", global.selectedFolderPath);
-    console.log("Selected folder path: ", global.selectedFolderPath);
-
-    // hide previous conversion status if any
-    mainWindow.webContents.send("conversion-status", "");
+  try {
+    // Store the selected folder path in the global variable
+    if (!canceled && filePaths && filePaths?.length > 0) {
+      // encode the path as utf8
+      let selectedPath = Buffer.from(filePaths[0], "utf8").toString("utf8");
+      setSelectedFolderPath(selectedPath, folderType);
+    }
+  } catch (err) {
+    console.error(err);
   }
 
   // show the "Convert to MP4" button if the bg image is also already selected
-  if (global.selectedImagePath && global.selectedImagePath !== "") {
+  if (
+    global.selectedInputFolderPath &&
+    global.selectedOutputFolderPath &&
+    global.selectedImagePath
+  ) {
     mainWindow.webContents.send("show-convert-button");
   }
+}
+
+function setSelectedFolderPath(folderPath, folderType = "input") {
+  // hide previous conversion status if any
+  mainWindow.webContents.send("conversion-status", "");
+
+  let callBackChannel =
+    folderType === "input" ? "selected-input-folder" : "selected-output-folder";
+  if (folderType === "input") {
+    global.selectedInputFolderPath = folderPath;
+  } else {
+    global.selectedOutputFolderPath = folderPath;
+  }
+
+  mainWindow.webContents.send(callBackChannel, folderPath);
+  console.log(`Selected ${folderType} folder path: `, folderPath);
 }
 
 async function selectImage(event, imagePath = global.selectedImagePath) {
@@ -168,7 +201,11 @@ async function selectImage(event, imagePath = global.selectedImagePath) {
     }
 
     // show the "Convert to MP4" button if the folder is also already selected
-    if (global.selectedFolderPath && global.selectedImagePath) {
+    if (
+      global.selectedInputFolderPath &&
+      global.selectedOutputFolderPath &&
+      global.selectedImagePath
+    ) {
       mainWindow.webContents.send("show-convert-button");
     }
   } catch (err) {
@@ -177,48 +214,57 @@ async function selectImage(event, imagePath = global.selectedImagePath) {
 }
 
 async function startConversion(event) {
-  // Start your conversion logic
-  if (!global.selectedFolderPath || !global.selectedImagePath === "") {
+  global.processAborted = false;
+  if (
+    !global.selectedInputFolderPath ||
+    !global.selectedOutputFolderPath ||
+    !global.selectedImagePath
+  ) {
     dialog.showErrorBox(
       "Error",
-      "Please select a folder to convert and a background image."
+      "Please select a folder to convert, an output folder and a background image."
     );
     return;
   }
 
   console.log(
     "Starting conversion\n",
-    "Selected Folder: ",
-    global.selectedFolderPath,
+    "Selected input Folder: ",
+    global.selectedInputFolderPath,
     "\n",
+    "Selected output Folder: ",
+    global.selectedOutputFolderPath,
     "Selected Background Image: ",
     global.selectedImagePath,
     "\n"
   );
-
-  // abort signal
-  let abortController = new AbortController();
-  global.abortController = abortController;
-
   // show the "Cancel" button and hide the "Convert to MP4" button
   mainWindow.webContents.send("hide-reset-button");
   mainWindow.webContents.send("hide-convert-button"); // You need to add this event to hide the "Convert" button
 
   mainWindow.webContents.send("conversion-status", "Conversion in progress...");
   mainWindow.webContents.send("show-cancel-button");
-  await convertAudiosToMP4(global.selectedFolderPath, global.selectedImagePath);
+  await convertAudiosToMP4(
+    global.selectedInputFolderPath,
+    global.selectedOutputFolderPath,
+    global.selectedImagePath
+  );
 }
 
 async function convertAudiosToMP4(
-  folderPath,
-  imagePath,
-  abortSignal = global.abortController
+  inputFolderPath,
+  outputFolderPath,
+  imagePath
 ) {
   let utf8ImagePath = await Buffer.from(imagePath, "utf8").toString("utf8");
-  let utf8FolderPath = await Buffer.from(folderPath, "utf8").toString("utf8");
+
+  let utf8OutputFolderPath = await Buffer.from(
+    outputFolderPath,
+    "utf8"
+  ).toString("utf8");
 
   let conversionProgresses = {};
-  let audioFiles = await fs.readdirSync(folderPath).filter((file) => {
+  let audioFiles = await fs.readdirSync(inputFolderPath).filter((file) => {
     let extension = path.parse(file).ext.replace(".", "");
     return validAudioExtensions.includes(extension);
   });
@@ -246,107 +292,172 @@ async function convertAudiosToMP4(
     conversionProgresses[file] = { fileName: utf8FileName, percent: 0 };
   });
 
+  global.userPreference = {
+    confirmDelete: undefined,
+    doNotAskAgain: false,
+  };
+
   for (let index = 0; index < audioFiles.length; index++) {
     // check if the conversion was cancelled
-    if (abortSignal.aborted) {
+    if (global.processAborted) {
       mainWindow.webContents.send("conversion-cancelled.");
+      return;
     }
 
     try {
       let file = audioFiles[index];
 
-      let utf8InputPath = await Buffer.from(
-        path.join(folderPath, file),
+      let utf8InputFilePath = await Buffer.from(
+        path.join(inputFolderPath, file),
         "utf8"
       ).toString("utf8");
 
       let utf8FileName = conversionProgresses[file].fileName;
-      let outputPath = path.join(utf8FolderPath, `${utf8FileName}.mp4`);
-      // let outputPath = path.join(folderPath, `${path.parse(file).name}.mp4`);
+      let outputFilePath = path.join(
+        utf8OutputFolderPath,
+        `${utf8FileName}.mp4`
+      );
 
       // check if the output file already exists
-      if (await fs.existsSync(outputPath)) {
-        // confirm and delete the output file
-        confirmDelete = await dialog.showMessageBoxSync(mainWindow, {
-          type: "question",
-          buttons: ["No", "Yes"],
-          title: "Confirm",
-          message: `The file ${outputPath} already exists. Do you want to replace it?`,
-        });
+      if (await fs.existsSync(outputFilePath)) {
+        // a dialog confirm and delete the output file, and a checkbox to prompt do same for all
+        if (
+          !global.userPreference.doNotAskAgain ||
+          global.userPreference.confirmDelete === undefined
+        ) {
+          const { response, checkboxChecked } = await dialog.showMessageBox(
+            mainWindow,
+            {
+              type: "warning",
+              buttons: ["No", "Yes"],
+              title: "Confirm",
+              message: `The file ${outputFilePath} already exists. Do you want to replace it?`,
+              checkboxLabel: "Don't ask me again.",
+              checkboxChecked: false,
+            }
+          );
 
-        if (confirmDelete === 1) {
-          await fs.unlinkSync(outputPath);
-          console.log("Deleted existing file: ", outputPath);
+          // store the user preference
+          global.userPreference = {
+            confirmDelete: response,
+            doNotAskAgain: checkboxChecked,
+          };
+        }
+
+        if (global.userPreference.confirmDelete === 1) {
+          await fs.unlinkSync(outputFilePath);
+          console.log("Deleted file: ", outputFilePath);
         } else {
           // skip this file and continue with the next file
-          console.log("Skipped file: ", outputPath);
-          conversionProgresses[file] = { fileName: utf8FileName, percent: 100 };
+          conversionProgresses[file] = {
+            fileName: utf8FileName,
+            percent: 100,
+          };
+
           if (index === audioFiles.length - 1) {
             mainWindow.webContents.send("conversion-done");
           }
 
+          console.log("Skipped file: ", outputFilePath);
           continue;
         }
       }
 
-      await ffmpeg(abortSignal)
-        .input(utf8InputPath)
-        .input(utf8ImagePath)
-        .outputOptions([
-          "-c:v libx264", // Video codec
-          "-preset slow", // Video encoding preset (adjust as needed)
-          "-crf 23", // Video quality (adjust as needed)
-          "-c:a aac", // Audio codec
-          "-b:a 128k",
-          "-progress pipe:1", // Output progress to stdout
-        ])
-        .output(outputPath)
-        .on("end", () => {
-          // Conversion complete for this file
-          console.log(`Conversion complete: ${utf8FileName}.mp4`);
-          conversionProgresses[file] = { fileName: utf8FileName, percent: 100 };
-          if (index === audioFiles.length - 1) {
-            mainWindow.webContents.send("conversion-done");
-          }
-        })
-        .on("progress", (progress) => {
-          // check if the conversion was cancelled
-          if (abortSignal.aborted) {
-            mainWindow.webContents.send("conversion-cancelled.");
-          }
-
-          // Conversion progress
-          conversionProgresses[file] = {
-            fileName: utf8FileName,
-            percent: progress?.percent ?? 0,
-          };
-
-          console.log(`Processing ${utf8FileName}: ${progress.percent}% done`);
-
-          let progresses = Object.values(conversionProgresses).map(
-            (p) => p.percent
-          );
-          let avgProgress = averageProgress(progresses, audioFiles.length);
-          mainWindow.webContents.send(
-            "conversion-status",
-            `Completed: ${avgProgress < 0 ? 0 : Math.round(avgProgress, 2)}%`
-          );
-        })
-        .on("error", (err) => {
-          console.error(err);
-          mainWindow.webContents.send(
-            "conversion-status",
-            `Conversion failed for ${utf8FileName}.mp4`
-          );
-        })
-        .run();
+      // can be used with await if we'd like to process files one after the other
+      ffmpegSync(
+        index,
+        file,
+        utf8FileName,
+        utf8InputFilePath,
+        utf8ImagePath,
+        outputFilePath,
+        audioFiles,
+        conversionProgresses
+      );
     } catch (err) {
       console.error(err);
       mainWindow.webContents.send("conversion-failed", err);
     }
   }
+}
 
-  mainWindow.webContents.send("conversion-done");
+function ffmpegSync(
+  index,
+  file,
+  utf8FileName,
+  utf8InputFilePath,
+  utf8ImagePath,
+  outputFilePath,
+  audioFiles,
+  conversionProgresses
+) {
+  return new Promise((resolve, reject) => {
+    let process = ffmpeg()
+      .input(utf8InputFilePath)
+      .input(utf8ImagePath)
+      .outputOptions([
+        "-c:v libx264", // Video codec
+        "-preset slow", // Video encoding preset (adjust as needed)
+        "-crf 23", // Video quality (adjust as needed)
+        "-c:a aac", // Audio codec
+        "-b:a 128k",
+        "-progress pipe:1", // Output progress to stdout
+      ])
+      .output(outputFilePath)
+      .on("end", () => {
+        // Conversion complete for this file
+        console.log(`Conversion complete: ${utf8FileName}.mp4`);
+        conversionProgresses[file] = { fileName: utf8FileName, percent: 100 };
+        if (index === audioFiles.length - 1) {
+          mainWindow.webContents.send("conversion-done");
+        }
+
+        resolve();
+      });
+
+    process.on("progress", (progress) => {
+      // check if the conversion was cancelled
+      if (global.processAborted) {
+        process.kill();
+        mainWindow.webContents.send("conversion-cancelled");
+        return;
+      }
+
+      // Conversion progress
+      conversionProgresses[file] = {
+        fileName: utf8FileName,
+        percent: progress?.percent ?? 0,
+      };
+
+      console.log(`Processing ${utf8FileName}: ${progress.percent}% done`);
+
+      let progresses = Object.values(conversionProgresses).map(
+        (p) => p.percent
+      );
+      let avgProgress = averageProgress(progresses, audioFiles.length);
+      mainWindow.webContents.send(
+        "conversion-status",
+        `Completed: ${avgProgress < 0 ? 0 : Math.round(avgProgress, 2)}%`
+      );
+    });
+
+    process
+      .on("error", (err) => {
+        if (
+          global.processAborted ||
+          err.message.includes("SIGKILL") ||
+          err.message.includes("SIGTERM")
+        ) {
+          console.log("Conversion cancelled.");
+          resolve();
+        }
+
+        // delete the output file
+        fs.unlinkSync(outputFilePath);
+        reject(err);
+      })
+      .run();
+  });
 }
 
 function averageProgress(progresses) {
@@ -359,13 +470,13 @@ function averageProgress(progresses) {
 
 function cancelConversion(event) {
   // cancel the conversion
-  global.abortController.abort();
+  global.processAborted = true;
   mainWindow.webContents.send("hide-cancel-button");
   mainWindow.webContents.send("show-convert-button");
 }
 
 function reset() {
-  global.selectedFolderPath = "";
+  global.selectedInputFolderPath = "";
   global.selectedImagePath = "";
   mainWindow.webContents.send("hide-cancel-button");
   mainWindow.webContents.send("hide-reset-button");
