@@ -520,7 +520,16 @@ function sessionFilter(fileName) {
       : "";
   if (!session) return {};
 
-  let fontFile = "assets/fonts/Roboto-BoldItalic.ttf";
+  let fontFile = isProd
+    ? path.join(
+        __dirname,
+        "..",
+        "..",
+        "assets",
+        "fonts",
+        "Roboto-BoldItalic.ttf"
+      )
+    : "assets/fonts/Roboto-BoldItalic.ttf";
 
   if (!fs.existsSync(fontFile)) {
     mainWindow.webContents.send(
@@ -599,6 +608,7 @@ function ayahRangeFilter(fileName) {
     ayahRangeMatch && ayahRangeMatch.length > 0 ? ayahRangeMatch[0] : "";
 
   if (!ayahRange) return {};
+
   let fontFile = isProd
     ? path.join(
         __dirname,
