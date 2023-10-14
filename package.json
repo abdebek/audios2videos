@@ -10,21 +10,29 @@
     "asarUnpack": [
       "node_modules/ffmpeg-static-electron/bin/win/x64/ffmpeg",
       "node_modules/ffmpeg-static-electron/index.js",
-      "node_modules/ffmpeg-static-electron/package.json"
+      "node_modules/ffmpeg-static-electron/package.json",
+      "assets/fonts/*.ttf"
     ],
     "files": [
       "./src/index.js",
       "./src/preload.js",
       "./src/renderer.js",
       "./src/index.html",
-      "./src/styles.css"
+      "./src/styles.css",
+      "./assets/icon.ico"
     ],
+    "extraResources": [
+      "./assets/fonts/*.ttf"
+    ],
+    "directories": {
+      "buildResources": "assets/fonts/*.ttf"
+    },
     "win": {
       "icon": "./assets/icon.ico",
-      "target": [
-        "nsis"
-      ],
       "publisherName": "Waanfeetan"
+    },
+    "nsis": {
+      "oneClick": true
     }
   },
   "scripts": {
@@ -42,6 +50,7 @@
   },
   "license": "MIT",
   "dependencies": {
+    "@mapbox/mapbox-gl-rtl-text": "^0.2.3",
     "electron-dialog": "^2.0.0",
     "electron-squirrel-startup": "^1.0.0",
     "ffmpeg-static-electron": "^2.0.3",

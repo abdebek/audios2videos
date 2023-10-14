@@ -2,6 +2,7 @@ const { app, Menu, BrowserWindow, dialog, ipcMain } = require("electron");
 const path = require("node:path");
 const fs = require("fs");
 const ffmpeg = require("fluent-ffmpeg");
+const rtlText = require("@mapbox/mapbox-gl-rtl-text");
 
 //Get the paths to the packaged versions of the binaries we want to use
 const ffmpegPath = require("ffmpeg-static-electron").path.replace(
@@ -12,6 +13,8 @@ const ffprobePath = require("ffprobe-static-electron").path.replace(
   "app.asar",
   "app.asar.unpacked"
 );
+
+const isProd = false; // env === "production"
 
 //tell the ffmpeg package where it can find the needed binaries.
 ffmpeg.setFfmpegPath(ffmpegPath);
@@ -49,6 +52,9 @@ const createWindow = () => {
     },
   });
 
+  // global reference to mainWindow (necessary to prevent window from being garbage collected)
+  global.mainWindow = mainWindow;
+
   // Create the Application's main menu
   var template = [];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
@@ -66,22 +72,8 @@ const createWindow = () => {
   // and load the index.html of the app.
   mainWindow.loadFile(path.join(__dirname, "index.html"));
 
-  // check ffmpeg installation
-  ffmpeg.getAvailableEncoders((err, encoders) => {
-    if (err) {
-      console.error(err);
-      dialog.showErrorBox(
-        "Error",
-        "FFMPEG not installed. Please install FFMPEG and try again."
-      );
-      return;
-    }
-
-    console.log("Available encoders: ", encoders);
-  });
-
   // Open the DevTools.
-  mainWindow.webContents.openDevTools();
+  // mainWindow.webContents.openDevTools();
 
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -114,7 +106,24 @@ app.whenReady().then(() => {
 });
 
 function selectInputFolder(event) {
+  if (ffmpeg) {
+    checkFfmpeg();
+  }
+
   selectFolder(event, "input");
+}
+
+function checkFfmpeg() {
+  ffmpeg.getAvailableFormats((err, formats) => {
+    if (err) {
+      mainWindow.webContents.send(
+        "conversion-status",
+        "A necessary library is missing."
+      );
+    } else {
+      mainWindow.webContents.send("conversion-status", "");
+    }
+  });
 }
 
 function selectOutputFolder(event) {
@@ -392,33 +401,33 @@ function ffmpegSync(
   conversionProgresses
 ) {
   return new Promise((resolve, reject) => {
-    let process = ffmpeg()
-      .input(utf8InputFilePath)
+    let filters = [
+      sessionFilter(utf8FileName),
+      surahFilter(utf8FileName),
+      ayahRangeFilter(utf8FileName),
+    ].filter((f) => !!f.options);
+
+    console.log("Filters: ", filters);
+
+    // add options:
+    let ffmpegProcess = ffmpeg(utf8InputFilePath)
       .input(utf8ImagePath)
       .outputOptions([
         "-c:v libx264", // Video codec
         "-preset slow", // Video encoding preset (adjust as needed)
         "-crf 23", // Video quality (adjust as needed)
         "-c:a aac", // Audio codec
-        "-b:a 128k",
+        "-b:a 128k", // Audio bitrate (adjust as needed)
+        // `drawtext="fontsize=30:fontfile=assets/fonts/Roboto-BoldItalic.ttf:text='hello world':x=if(eq(mod(t\,30)\,0)\,rand(0\,(w-text_w))\,x):y=if(eq(mod(t\,30)\,0)\,rand(0\,(h-text_h))\,y)"`,
         "-progress pipe:1", // Output progress to stdout
       ])
-      .output(outputFilePath)
-      .on("end", () => {
-        // Conversion complete for this file
-        console.log(`Conversion complete: ${utf8FileName}.mp4`);
-        conversionProgresses[file] = { fileName: utf8FileName, percent: 100 };
-        if (index === audioFiles.length - 1) {
-          mainWindow.webContents.send("conversion-done");
-        }
+      .videoFilters(filters)
+      .output(outputFilePath);
 
-        resolve();
-      });
-
-    process.on("progress", (progress) => {
+    ffmpegProcess.on("progress", (progress) => {
       // check if the conversion was cancelled
       if (global.processAborted) {
-        process.kill();
+        ffmpegProcess.kill();
         mainWindow.webContents.send("conversion-cancelled");
         return;
       }
@@ -441,7 +450,21 @@ function ffmpegSync(
       );
     });
 
-    process
+    ffmpegProcess.on("end", () => {
+      // Conversion complete for this file
+      console.log(`Conversion complete: ${utf8FileName}.mp4`);
+      conversionProgresses[file] = {
+        fileName: utf8FileName,
+        percent: 100,
+      };
+      if (index === audioFiles.length - 1) {
+        mainWindow.webContents.send("conversion-done");
+      }
+
+      resolve();
+    });
+
+    ffmpegProcess
       .on("error", (err) => {
         if (
           global.processAborted ||
@@ -452,11 +475,18 @@ function ffmpegSync(
           resolve();
         }
 
-        // delete the output file
-        fs.unlinkSync(outputFilePath);
+        // delete the output file if it exists
+        if (fs.existsSync(outputFilePath)) {
+          fs.unlinkSync(outputFilePath);
+        }
+
+        console.error(err);
         reject(err);
       })
       .run();
+  }).catch((err) => {
+    console.error(err);
+    mainWindow.webContents.send("conversion-failed", "Conversion failed.");
   });
 }
 
@@ -480,4 +510,123 @@ function reset() {
   global.selectedImagePath = "";
   mainWindow.webContents.send("hide-cancel-button");
   mainWindow.webContents.send("hide-reset-button");
+}
+
+function sessionFilter(fileName) {
+  let sessionMatch = fileName.match(/\(\d+\)/g);
+  let session =
+    sessionMatch && sessionMatch.length > 0
+      ? sessionMatch[0].replace("(", "").replace(")", "")
+      : "";
+  if (!session) return {};
+
+  let fontFile = "assets/fonts/Roboto-BoldItalic.ttf";
+
+  if (!fs.existsSync(fontFile)) {
+    mainWindow.webContents.send(
+      "conversion-status",
+      `Font file does not exist: ${fontFile} `
+    );
+    return {};
+  }
+
+  return {
+    filter: "drawtext",
+    options: {
+      fontfile: fontFile,
+      text: `Kutaa ${session}ffaa`,
+      fontsize: 36,
+      fontcolor: "red",
+      x: 25,
+      y: 25,
+    },
+  };
+}
+
+function surahFilter(fileName) {
+  try {
+    let surahName = fileName
+      .match(/[\u0600-\u06FF\s]/g)
+      ?.join("")
+      ?.trim(" ");
+
+    if (!surahName || surahName.length === 0) return {};
+
+    let shapedArabicText = rtlText.applyArabicShaping(surahName);
+    let readyForDisplay = rtlText.processBidirectionalText(
+      shapedArabicText,
+      []
+    );
+
+    let fontFile = isProd
+      ? path.join(
+          __dirname,
+          "..",
+          "..",
+          "assets",
+          "fonts",
+          "NotoNaskhArabic-Bold.ttf"
+        )
+      : "assets/fonts/NotoNaskhArabic-Bold.ttf";
+
+    if (!fs.existsSync(fontFile)) {
+      mainWindow.webContents.send(
+        "conversion-status",
+        `Font file does not exist: ${fontFile} `
+      );
+      return {};
+    }
+
+    return {
+      filter: "drawtext",
+      options: {
+        fontfile: fontFile,
+        text: `${readyForDisplay}`,
+        fontsize: 48,
+        fontcolor: "red",
+        x: 975,
+        y: 25,
+      },
+    };
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+function ayahRangeFilter(fileName) {
+  let ayahRangeMatch = fileName.match(/\d+\s*-\s*\d+/g);
+  let ayahRange =
+    ayahRangeMatch && ayahRangeMatch.length > 0 ? ayahRangeMatch[0] : "";
+
+  if (!ayahRange) return {};
+  let fontFile = isProd
+    ? path.join(
+        __dirname,
+        "..",
+        "..",
+        "assets",
+        "fonts",
+        "Roboto-BoldItalic.ttf"
+      )
+    : "assets/fonts/Roboto-BoldItalic.ttf";
+
+  if (!fs.existsSync(fontFile)) {
+    mainWindow.webContents.send(
+      "conversion-status",
+      `Font file does not exist: ${fontFile} `
+    );
+    return {};
+  }
+
+  return {
+    filter: "drawtext",
+    options: {
+      fontfile: fontFile, // "assets/fonts/Roboto-BoldItalic.ttf"
+      text: `${ayahRange}`,
+      fontsize: 24,
+      fontcolor: "blue",
+      x: 1050,
+      y: 85,
+    },
+  };
 }
