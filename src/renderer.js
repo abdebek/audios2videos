@@ -88,7 +88,7 @@ window.electronAPI.on("conversion-failed", () => {
   // resetState();
 });
 
-// conversion canceled
+// conversion cancelled
 window.electronAPI.on("conversion-cancelled", () => {
   conversionStatus.innerHTML = "Canceled.";
   cancelBtn.hidden = true;

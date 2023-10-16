@@ -1,12 +1,15 @@
 {
   "name": "audios2videos",
   "productName": "Audios2videos",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Converts a whole folder audio files to videos",
   "main": "./src/index.js",
   "build": {
     "appId": "audios2videos.waanfeetan.com",
     "asar": true,
+    "electronLanguages": [
+      "en"
+    ],
     "asarUnpack": [
       "node_modules/ffmpeg-static-electron/bin/win/x64/ffmpeg",
       "node_modules/ffmpeg-static-electron/index.js",

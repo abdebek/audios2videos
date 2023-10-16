@@ -14,7 +14,7 @@ const ffprobePath = require("ffprobe-static-electron").path.replace(
   "app.asar.unpacked"
 );
 
-const isProd = false; // env === "production"
+const isProd = false;
 
 //tell the ffmpeg package where it can find the needed binaries.
 ffmpeg.setFfmpegPath(ffmpegPath);
@@ -363,9 +363,7 @@ async function convertAudiosToMP4(
             percent: 100,
           };
 
-          if (index === audioFiles.length - 1) {
-            mainWindow.webContents.send("conversion-done");
-          }
+          reportProgress(conversionProgresses, audioFiles);
 
           console.log("Skipped file: ", outputFilePath);
           continue;
@@ -385,7 +383,10 @@ async function convertAudiosToMP4(
       );
     } catch (err) {
       console.error(err);
-      mainWindow.webContents.send("conversion-failed", err);
+      mainWindow.webContents.send(
+        "conversion-status",
+        `An error occurred while converting.`
+      );
     }
   }
 }
@@ -410,15 +411,22 @@ function ffmpegSync(
     console.log("Filters: ", filters);
 
     // add options:
-    let ffmpegProcess = ffmpeg(utf8InputFilePath)
+    let ffmpegProcess = ffmpeg()
+      .input(utf8InputFilePath)
       .input(utf8ImagePath)
+      .inputOptions(["-loop 1"]) // loop the image and disable audio
       .outputOptions([
+        // optimized for youtube
+        "-shortest", // Finish encoding when the shortest input stream ends
+        "-movflags faststart", // Optimize for streaming
+        "-pix_fmt yuv420p", // Optimize for streaming
+        // "-vf scale=1280:720", // Optimize for streaming, but causes issues with some videos
         "-c:v libx264", // Video codec
-        "-preset slow", // Video encoding preset (adjust as needed)
+        "-tune stillimage", // Optimize for still images
+        "-preset veryfast", // Video quality (adjust as needed)
         "-crf 23", // Video quality (adjust as needed)
         "-c:a aac", // Audio codec
         "-b:a 128k", // Audio bitrate (adjust as needed)
-        // `drawtext="fontsize=30:fontfile=assets/fonts/Roboto-BoldItalic.ttf:text='hello world':x=if(eq(mod(t\,30)\,0)\,rand(0\,(w-text_w))\,x):y=if(eq(mod(t\,30)\,0)\,rand(0\,(h-text_h))\,y)"`,
         "-progress pipe:1", // Output progress to stdout
       ])
       .videoFilters(filters)
@@ -440,14 +448,7 @@ function ffmpegSync(
 
       console.log(`Processing ${utf8FileName}: ${progress.percent}% done`);
 
-      let progresses = Object.values(conversionProgresses).map(
-        (p) => p.percent
-      );
-      let avgProgress = averageProgress(progresses, audioFiles.length);
-      mainWindow.webContents.send(
-        "conversion-status",
-        `Completed: ${avgProgress < 0 ? 0 : Math.round(avgProgress, 2)}%`
-      );
+      reportProgress(conversionProgresses, audioFiles);
     });
 
     ffmpegProcess.on("end", () => {
@@ -486,8 +487,20 @@ function ffmpegSync(
       .run();
   }).catch((err) => {
     console.error(err);
-    mainWindow.webContents.send("conversion-failed", "Conversion failed.");
+    mainWindow.webContents.send(
+      "conversion-status",
+      `An error occurred while converting.`
+    );
   });
+}
+
+function reportProgress(conversionProgresses, audioFiles) {
+  let progresses = Object.values(conversionProgresses).map((p) => p.percent);
+  let avgProgress = averageProgress(progresses, audioFiles.length);
+  mainWindow.webContents.send(
+    "conversion-status",
+    `Completed: ${avgProgress < 0 ? 0 : Math.round(avgProgress, 2)}%`
+  );
 }
 
 function averageProgress(progresses) {
